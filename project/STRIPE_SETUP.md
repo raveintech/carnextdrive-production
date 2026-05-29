@@ -30,7 +30,7 @@ cp .env.example .env
 Open `.env` and fill in:
 
 ```
-STRIPE_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxxxxxxxxx
+STRIPE_SECRET_KEY=sk_test_your_key_here
 STRIPE_WEBHOOK_SECRET=          # leave blank until step 5
 ```
 
