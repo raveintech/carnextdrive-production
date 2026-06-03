@@ -11,35 +11,55 @@ const CARS: Record<string, { name: string; weekly: number; monthly: number }> = 
   "3": { name: "Chevy Tahoe", weekly: 479, monthly: 1599 },
 };
 
-// Server-side upload: streams the files through our /api/upload endpoint
-// which talks to Cloudinary using server-only credentials. Returns the
-// public Cloudinary URLs that we then attach to the Stripe session.
+// Cloudinary cloud name
+const CLOUDINARY_CLOUD_NAME =
+  (typeof import.meta !== "undefined" &&
+    (import.meta as any).env?.VITE_CLOUDINARY_CLOUD_NAME) ||
+  "drlo4xvo8";
+
+// Direct client-side upload to Cloudinary using unsigned preset.
+// Requires unsigned upload preset named exactly: carnextdrive-uploads
 async function uploadFilesToServer(
   licenseFile: File,
   idFile: File,
 ): Promise<{ licenseUrl: string; idUrl: string }> {
-  const fd = new FormData();
-  fd.append("license", licenseFile);
-  fd.append("id", idFile);
-  const r = await fetch("/api/upload", { method: "POST", body: fd });
-  if (!r.ok) {
-    const body = await r.text().catch(() => "");
-    let parsed: any = null;
-    try {
-      parsed = JSON.parse(body);
-    } catch {
-      // ignore
-    }
-    throw new Error(
-      parsed?.error ||
-        `File upload failed (server returned ${r.status}). Check Cloudinary credentials on the server.`,
+  const uploadToCloudinary = async (file: File): Promise<string> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("upload_preset", "carnextdrive-uploads");
+
+    const r = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
+      { method: "POST", body: fd },
     );
-  }
-  const data = (await r.json()) as { licenseUrl: string; idUrl: string };
-  if (!data.licenseUrl || !data.idUrl) {
-    throw new Error("Upload succeeded but URLs are missing.");
-  }
-  return data;
+
+    if (!r.ok) {
+      const body = await r.text().catch(() => "");
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        // ignore
+      }
+      throw new Error(
+        parsed?.error?.message ||
+          `Cloudinary upload failed (${r.status}). Check your upload preset and cloud name.`,
+      );
+    }
+
+    const data = await r.json();
+    if (!data.secure_url) {
+      throw new Error("Cloudinary upload succeeded but no URL was returned.");
+    }
+    return data.secure_url as string;
+  };
+
+  const [licenseUrl, idUrl] = await Promise.all([
+    uploadToCloudinary(licenseFile),
+    uploadToCloudinary(idFile),
+  ]);
+
+  return { licenseUrl, idUrl };
 }
 
 export default function Signup() {
@@ -62,9 +82,6 @@ export default function Signup() {
     [car, plan, price],
   );
 
-  // localStorage key used to recover form data if the page is reloaded
-  // mid-application (e.g. Stripe redirect cancellation, accidental refresh).
-  // Files cannot be persisted to localStorage so the user re-attaches them.
   const STORAGE_KEY = "carnextdrive:signup-form";
 
   const [formData, setFormData] = useState<{
@@ -92,7 +109,7 @@ export default function Signup() {
           };
         }
       } catch {
-        // ignore — start fresh
+        // ignore
       }
     }
     return {
@@ -103,11 +120,10 @@ export default function Signup() {
       idFile: null,
     };
   });
+
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Persist text fields to localStorage on every change so an accidental
-  // refresh doesn't wipe what the customer has typed.
   useEffect(() => {
     try {
       window.localStorage.setItem(
@@ -119,7 +135,7 @@ export default function Signup() {
         }),
       );
     } catch {
-      // localStorage may be disabled (private mode) — non-fatal
+      // ignore
     }
   }, [formData.fullName, formData.email, formData.phone]);
 
@@ -141,7 +157,6 @@ export default function Signup() {
   const submitApplication = async () => {
     setErrorMsg(null);
 
-    // Validate required fields in JS so we control error messaging
     if (!hasSelection) {
       setErrorMsg(
         "Please pick a car and a plan first (Weekly or Monthly) from the vehicle page.",
@@ -170,17 +185,11 @@ export default function Signup() {
     }
 
     setSubmitting(true);
-    console.log("[booking] Submitting application…", {
-      carId,
-      plan,
-      price,
-    });
 
     try {
-      // 1) Upload license + ID to Cloudinary via our server (signed upload).
-      console.log("[booking] Uploading license + ID to server…");
       let licenseUrl = "";
       let idUrl = "";
+
       try {
         const up = await uploadFilesToServer(
           formData.licenseFile,
@@ -188,23 +197,13 @@ export default function Signup() {
         );
         licenseUrl = up.licenseUrl;
         idUrl = up.idUrl;
-        console.log("[booking] Cloudinary uploads OK", { licenseUrl, idUrl });
       } catch (upErr: any) {
-        console.error("[booking] Upload failed:", upErr);
         throw new Error(
           upErr?.message ||
             "We couldn't upload your documents. Please try again.",
         );
       }
 
-      // 2) Formspree email is sent SERVER-SIDE after Stripe confirms payment
-      //    (see /api/notify/:sessionId and the Stripe webhook). No client
-      //    Formspree call here.
-
-      // 3) Create Stripe Checkout subscription session and redirect.
-      //    The license/ID URLs travel along in session metadata so the
-      //    backend can include them in the application email.
-      console.log("[booking] Creating Stripe Checkout session…");
       const res = await fetch("/api/create-checkout-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -219,6 +218,7 @@ export default function Signup() {
           originUrl: window.location.origin,
         }),
       });
+
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         let parsed: any = null;
@@ -227,26 +227,19 @@ export default function Signup() {
         } catch {
           // not JSON
         }
-        console.error(
-          "[booking] /api/create-checkout-session failed:",
-          res.status,
-          body,
-        );
         throw new Error(
           parsed?.error ||
             `Payment could not be started (server returned ${res.status}). Make sure STRIPE_SECRET_KEY is set on the server.`,
         );
       }
+
       const data = await res.json();
       if (!data.url) {
         throw new Error("Stripe did not return a checkout URL.");
       }
-      console.log("[booking] Redirecting to Stripe:", data.url);
 
-      // Redirect to real Stripe Checkout
       window.location.href = data.url;
     } catch (err: any) {
-      console.error("[booking] Submit error:", err);
       setErrorMsg(
         err?.message ||
           "Something went wrong starting your payment. Please try again.",
@@ -256,9 +249,6 @@ export default function Signup() {
   };
 
   const handleSubmit = (e: React.FormEvent) => {
-    // Belt-and-braces: even though the submit button is now type="button",
-    // also block any accidental form submission (e.g. user hits Enter inside
-    // an input).
     e.preventDefault();
     e.stopPropagation();
     void submitApplication();
@@ -279,7 +269,6 @@ export default function Signup() {
           </p>
         </div>
 
-        {/* Selected car/plan summary */}
         {hasSelection ? (
           <div
             data-testid="booking-summary"
@@ -321,7 +310,6 @@ export default function Signup() {
         )}
 
         <form onSubmit={handleSubmit} noValidate className="space-y-6">
-          {/* Full Name */}
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">
               Full Name
@@ -337,7 +325,6 @@ export default function Signup() {
             />
           </div>
 
-          {/* Email */}
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">
               Email Address
@@ -353,7 +340,6 @@ export default function Signup() {
             />
           </div>
 
-          {/* Phone */}
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">
               Phone Number
@@ -369,7 +355,6 @@ export default function Signup() {
             />
           </div>
 
-          {/* Upload Driver License */}
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">
               Upload Driver License
@@ -397,7 +382,6 @@ export default function Signup() {
             </div>
           </div>
 
-          {/* Upload ID */}
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">
               Upload ID
@@ -434,7 +418,6 @@ export default function Signup() {
             </div>
           )}
 
-          {/* Submit Button */}
           <Button
             type="button"
             onClick={submitApplication}
