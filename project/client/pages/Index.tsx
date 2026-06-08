@@ -21,34 +21,31 @@ export default function Index() {
       <Navigation />
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 min-h-[500px]">
-          {/* Left side - Text content */}
-          <div className="flex flex-col justify-center px-6 sm:px-12 py-12 lg:py-0 bg-white">
-            <h1 className="text-5xl lg:text-6xl font-bold text-foreground mb-4 leading-tight">
-              Drive a Car Weekly.
-              <br />
-              Simple & Affordable.
-            </h1>
-            <p className="text-lg text-foreground/70 mb-8 font-medium">
-              Flexible rentals. No long-term commitment.
-            </p>
-            <div className="flex gap-4">
-              <Link to="/">
-                <Button className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold text-base px-8 py-3">
-                  Browse Cars
-                </Button>
-              </Link>
-            </div>
-          </div>
-
-          {/* Right side - Hero image */}
-          <div className="relative hidden lg:block bg-gray-100">
-            <img
-              src="/cars/tahoe.jpg"
-              alt="Chevy Tahoe SUV"
-              className="w-full h-full object-cover"
-            />
+      <section className="relative overflow-hidden min-h-[500px]">
+        {/* Full-width background image */}
+        <img
+          src="/cars/ecar.jpg"
+          alt="Ecar"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        {/* Dark overlay for text readability */}
+        <div className="absolute inset-0 bg-black/45" />
+        {/* Text content */}
+        <div className="relative flex flex-col justify-center px-6 sm:px-12 py-24 lg:py-32 max-w-3xl">
+          <h1 className="text-5xl lg:text-6xl font-bold text-white mb-4 leading-tight">
+            Drive a Car Weekly.
+            <br />
+            Simple & Affordable.
+          </h1>
+          <p className="text-lg text-white/80 mb-8 font-medium">
+            Flexible rentals. No long-term commitment.
+          </p>
+          <div className="flex gap-4">
+            <Link to="/">
+              <Button className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold text-base px-8 py-3">
+                Browse Cars
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
