@@ -13,26 +13,17 @@ NODE_VERSION = "20"
 # is why "Cannot find module 'express'" happens even though express is
 # in dependencies. Forcing npm gives a flat node_modules that
 # zip-it-and-ship-it can read.
-NPM_FLAGS = "--include=optional"
+NPM_FLAGS = "--include=optional --legacy-peer-deps"
 NETLIFY_USE_PNPM = "false"
 
 [functions]
-# List every npm package that is `import`ed or `require`d at runtime by
-# the function. esbuild keeps them external and Netlify packages each
-# one's node_modules folder alongside the bundled handler. If a runtime
-# import is missing from this list AND has tricky internals (dynamic
-# require, native bindings, etc.) the bundle can throw at cold-start
-# with "Cannot find module 'X'".
-external_node_modules = [
-  "express",
-  "cors",
-  "serverless-http",
-  "stripe",
-  "cloudinary",
-  "multer",
-  "dotenv",
-]
-
+# Bundle ALL runtime dependencies INTO the function with esbuild (note: no
+# external_node_modules). This makes the function self-contained, so it does
+# not matter how dependencies are installed on the build host (npm, pnpm, a
+# symlinked store, etc.) — there is no runtime node_modules lookup to fail.
+# This is the deployment-agnostic fix for the "Cannot find module 'express'"
+# cold-start crash. Verified locally: the bundled handler loads with no
+# node_modules present.
 node_bundler = "esbuild"
 
 [[redirects]]

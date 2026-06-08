@@ -13,22 +13,14 @@
   NODE_VERSION = "20"
   # Force npm, not pnpm. pnpm's symlinked node_modules layout is what makes
   # the function bundler throw "Cannot find module 'express'" at cold start.
-  NPM_FLAGS = "--include=optional"
+  NPM_FLAGS = "--include=optional --legacy-peer-deps"
   NETLIFY_USE_PNPM = "false"
 
 [functions]
-  # Runtime npm packages imported by the serverless function. esbuild keeps
-  # them external and Netlify packages each one's node_modules alongside the
-  # bundled handler.
-  external_node_modules = [
-    "express",
-    "cors",
-    "serverless-http",
-    "stripe",
-    "cloudinary",
-    "multer",
-    "dotenv",
-  ]
+  # Bundle ALL runtime dependencies INTO the function (no external_node_modules)
+  # so it is self-contained and works regardless of how deps are installed
+  # (npm, pnpm, symlinked store). This is the deployment-agnostic fix for the
+  # "Cannot find module 'express'" cold-start crash.
   node_bundler = "esbuild"
 
 [[redirects]]
