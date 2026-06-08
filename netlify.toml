@@ -11,10 +11,9 @@
 [build.environment]
   # Node 20 has built-in fetch and is supported by Netlify Functions.
   NODE_VERSION = "20"
-  # Force npm, not pnpm. pnpm's symlinked node_modules layout is what makes
-  # the function bundler throw "Cannot find module 'express'" at cold start.
-  NPM_FLAGS = "--include=optional --legacy-peer-deps"
-  NETLIFY_USE_PNPM = "false"
+  # Install with pnpm (the project's package manager). npm can't parse the
+  # `link:` protocol in Vite 7's own package.json. The function is independent
+  # of the install layout because esbuild bundles all deps into the handler.
 
 [functions]
   # Bundle ALL runtime dependencies INTO the function (no external_node_modules)

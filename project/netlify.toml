@@ -7,14 +7,10 @@ publish = "dist/spa"
 # Pin Node to a version that has built-in fetch (used by the notification
 # code) and that Netlify Functions support natively.
 NODE_VERSION = "20"
-
-# Force npm even if pnpm-lock.yaml is present — the Netlify function
-# bundler doesn't understand pnpm's symlinked node_modules layout, which
-# is why "Cannot find module 'express'" happens even though express is
-# in dependencies. Forcing npm gives a flat node_modules that
-# zip-it-and-ship-it can read.
-NPM_FLAGS = "--include=optional --legacy-peer-deps"
-NETLIFY_USE_PNPM = "false"
+# Install with pnpm (the project's package manager). npm can't parse the
+# `link:` protocol in Vite 7's own package.json and fails the install. The
+# function no longer depends on the install layout because esbuild bundles
+# every runtime dependency into the handler (see [functions] below).
 
 [functions]
 # Bundle ALL runtime dependencies INTO the function with esbuild (note: no
