@@ -104,7 +104,12 @@ export const uploadHandler: RequestHandler = async (req, res) => {
 // of spam).
 const notifiedSessions = new Set<string>();
 
-const DATA_DIR = "/app/project/.data";
+// Writable data dir. Serverless bundles (Netlify Functions / AWS Lambda)
+// are read-only except /tmp, so use that there; locally (Replit dev or the
+// node-build server) keep the log inside the project at <cwd>/.data.
+const DATA_DIR = process.env.LAMBDA_TASK_ROOT
+  ? "/tmp/carnextdrive-data"
+  : path.join(process.cwd(), ".data");
 const LOG_PATH = path.join(DATA_DIR, "applications.jsonl");
 
 async function loadNotifiedFromDisk() {
