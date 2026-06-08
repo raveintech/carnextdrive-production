@@ -26,15 +26,14 @@ export interface Car {
 export const SEED_CARS: Car[] = [
   {
     id: "1",
-    name: "Chrysler 200",
+    name: "Ecar",
     type: "Sedan",
     weekly: 349,
     monthly: 1199,
     seats: 5,
     image: "/cars/chrysler-200.jpg",
-    imageCredit: "Photo: Kevauto / Wikimedia Commons / CC BY-SA 4.0",
     description:
-      "Smooth, stylish, and easy on gas. The Chrysler 200 is a comfortable sedan that's perfect for daily driving and weekend trips.",
+      "Smooth, stylish, and easy on gas. The Ecar is a comfortable sedan that's perfect for daily driving and weekend trips.",
     features: [
       "Backup Camera",
       "Bluetooth Connectivity",
@@ -51,8 +50,7 @@ export const SEED_CARS: Car[] = [
     weekly: 399,
     monthly: 1349,
     seats: 4,
-    image:
-      "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?w=800&h=600&fit=crop",
+    image: "/cars/camaro.jpg",
     description:
       "Iconic American muscle. The Chevy Camaro delivers serious performance and head-turning style on every drive.",
     features: [
