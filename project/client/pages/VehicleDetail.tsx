@@ -15,6 +15,7 @@ const vehicleData: Record<
     monthlyPrice: number;
     seats: number;
     image: string;
+    imageCredit?: string;
     description: string;
     features: string[];
   }
@@ -25,8 +26,8 @@ const vehicleData: Record<
     weeklyPrice: 349,
     monthlyPrice: 1199,
     seats: 5,
-    image:
-      "https://images.unsplash.com/photo-1552820728-8ac41f1ce891?w=800&h=600&fit=crop",
+    image: "/cars/chrysler-200.jpg",
+    imageCredit: "Photo: Kevauto / Wikimedia Commons / CC BY-SA 4.0",
     description:
       "Smooth, stylish, and easy on gas. The Chrysler 200 is a comfortable sedan that's perfect for daily driving and weekend trips.",
     features: [
@@ -63,8 +64,7 @@ const vehicleData: Record<
     weeklyPrice: 479,
     monthlyPrice: 1599,
     seats: 8,
-    image:
-      "https://images.unsplash.com/photo-1606611013016-969c19d4eeb9?w=800&h=600&fit=crop",
+    image: "/cars/tahoe.jpg",
     description:
       "A spacious and comfortable SUV perfect for families and group trips. The Chevy Tahoe offers excellent performance and luxury amenities.",
     features: [
@@ -133,6 +133,11 @@ export default function VehicleDetail() {
               alt={vehicle.name}
               className="w-full h-full object-cover"
             />
+            {vehicle.imageCredit && (
+              <span className="absolute bottom-1 right-2 text-[10px] text-white/70">
+                {vehicle.imageCredit}
+              </span>
+            )}
           </div>
 
           {/* Vehicle Details */}

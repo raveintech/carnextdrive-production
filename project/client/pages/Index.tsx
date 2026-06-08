@@ -12,8 +12,7 @@ const cars = [
     type: "Sedan",
     weeklyPrice: 349,
     monthlyPrice: 1199,
-    image:
-      "https://images.unsplash.com/photo-1552820728-8ac41f1ce891?w=500&h=400&fit=crop",
+    image: "/cars/chrysler-200.jpg",
   },
   {
     id: 2,
@@ -30,8 +29,7 @@ const cars = [
     type: "SUV",
     weeklyPrice: 479,
     monthlyPrice: 1599,
-    image:
-      "https://images.unsplash.com/photo-1606611013016-969c19d4eeb9?w=500&h=400&fit=crop",
+    image: "/cars/tahoe.jpg",
   },
 ];
 
@@ -65,8 +63,8 @@ export default function Index() {
           {/* Right side - Hero image */}
           <div className="relative hidden lg:block bg-gray-100">
             <img
-              src="https://images.unsplash.com/photo-1606611013016-969c19d4eeb9?w=800&h=600&fit=crop"
-              alt="Black SUV on road"
+              src="/cars/tahoe.jpg"
+              alt="Chevy Tahoe SUV"
               className="w-full h-full object-cover"
             />
           </div>
