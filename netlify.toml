@@ -1,0 +1,43 @@
+# Root-level Netlify config. The actual app lives in the project/ subdirectory,
+# so we set the base directory here in code (instead of relying on the Netlify
+# UI). With base = "project", Netlify cd's into project/, runs npm there, and
+# all other paths below are resolved relative to project/.
+[build]
+  base = "project"
+  command = "npm run build:client"
+  functions = "netlify/functions"
+  publish = "dist/spa"
+
+[build.environment]
+  # Node 20 has built-in fetch and is supported by Netlify Functions.
+  NODE_VERSION = "20"
+  # Force npm, not pnpm. pnpm's symlinked node_modules layout is what makes
+  # the function bundler throw "Cannot find module 'express'" at cold start.
+  NPM_FLAGS = "--include=optional"
+  NETLIFY_USE_PNPM = "false"
+
+[functions]
+  # Runtime npm packages imported by the serverless function. esbuild keeps
+  # them external and Netlify packages each one's node_modules alongside the
+  # bundled handler.
+  external_node_modules = [
+    "express",
+    "cors",
+    "serverless-http",
+    "stripe",
+    "cloudinary",
+    "multer",
+    "dotenv",
+  ]
+  node_bundler = "esbuild"
+
+[[redirects]]
+  force = true
+  from = "/api/*"
+  status = 200
+  to = "/.netlify/functions/api/:splat"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
