@@ -13,7 +13,7 @@ NODE_VERSION = "20"
 # is why "Cannot find module 'express'" happens even though express is
 # in dependencies. Forcing npm gives a flat node_modules that
 # zip-it-and-ship-it can read.
-NPM_FLAGS = "--include=optional"
+NPM_FLAGS = "--include=optional --legacy-peer-deps"
 NETLIFY_USE_PNPM = "false"
 
 [functions]

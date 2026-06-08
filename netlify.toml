@@ -13,7 +13,7 @@
   NODE_VERSION = "20"
   # Force npm, not pnpm. pnpm's symlinked node_modules layout is what makes
   # the function bundler throw "Cannot find module 'express'" at cold start.
-  NPM_FLAGS = "--include=optional"
+  NPM_FLAGS = "--include=optional --legacy-peer-deps"
   NETLIFY_USE_PNPM = "false"
 
 [functions]
