@@ -13,6 +13,14 @@ import {
   uploadMiddleware,
   notifyHandler,
 } from "./routes/notifications";
+import {
+  adminLogin,
+  requireAdmin,
+  listCars,
+  createCar,
+  updateCar,
+  deleteCar,
+} from "./routes/admin";
 
 export function createServer() {
   const app = express();
@@ -46,6 +54,13 @@ export function createServer() {
   // Cloudinary uploads + Formspree notifications
   app.post("/api/upload", uploadMiddleware, uploadHandler);
   app.post("/api/notify/:sessionId", notifyHandler);
+
+  // ── Admin (password-gated catalogue management) ──
+  app.post("/api/admin/login", adminLogin);
+  app.get("/api/admin/cars", requireAdmin, listCars);
+  app.post("/api/admin/cars", requireAdmin, createCar);
+  app.put("/api/admin/cars/:id", requireAdmin, updateCar);
+  app.delete("/api/admin/cars/:id", requireAdmin, deleteCar);
 
   return app;
 }

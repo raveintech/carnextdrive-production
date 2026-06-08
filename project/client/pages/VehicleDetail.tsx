@@ -1,91 +1,39 @@
 import { useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Navigation } from "@/components/Navigation";
 import { Users } from "lucide-react";
-
-// Display data for vehicle detail pages. Authoritative pricing lives on the
-// server in server/routes/stripe.ts (CAR_CATALOG). Keep prices in sync.
-const vehicleData: Record<
-  string,
-  {
-    name: string;
-    type: string;
-    weeklyPrice: number;
-    monthlyPrice: number;
-    seats: number;
-    image: string;
-    imageCredit?: string;
-    description: string;
-    features: string[];
-  }
-> = {
-  "1": {
-    name: "Chrysler 200",
-    type: "Sedan",
-    weeklyPrice: 349,
-    monthlyPrice: 1199,
-    seats: 5,
-    image: "/cars/chrysler-200.jpg",
-    imageCredit: "Photo: Kevauto / Wikimedia Commons / CC BY-SA 4.0",
-    description:
-      "Smooth, stylish, and easy on gas. The Chrysler 200 is a comfortable sedan that's perfect for daily driving and weekend trips.",
-    features: [
-      "Backup Camera",
-      "Bluetooth Connectivity",
-      "Climate Control",
-      "Touchscreen Display",
-      "Cruise Control",
-      "Power Windows",
-    ],
-  },
-  "2": {
-    name: "Chevy Camaro",
-    type: "Coupe",
-    weeklyPrice: 399,
-    monthlyPrice: 1349,
-    seats: 4,
-    image:
-      "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?w=800&h=600&fit=crop",
-    description:
-      "Iconic American muscle. The Chevy Camaro delivers serious performance and head-turning style on every drive.",
-    features: [
-      "Sport Mode",
-      "Backup Camera",
-      "Bluetooth Connectivity",
-      "Premium Sound",
-      "Leather Seats",
-      "Apple CarPlay/Android Auto",
-    ],
-  },
-  "3": {
-    name: "Chevy Tahoe",
-    type: "SUV",
-    weeklyPrice: 479,
-    monthlyPrice: 1599,
-    seats: 8,
-    image: "/cars/tahoe.jpg",
-    description:
-      "A spacious and comfortable SUV perfect for families and group trips. The Chevy Tahoe offers excellent performance and luxury amenities.",
-    features: [
-      "All-Wheel Drive",
-      "Cruise Control",
-      "Backup Camera",
-      "Bluetooth Connectivity",
-      "Climate Control",
-      "Leather Seats",
-    ],
-  },
-};
+import { fetchCars, FALLBACK_CARS } from "@/lib/cars";
 
 export default function VehicleDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const vehicle = vehicleData[id || "1"];
+
+  // Live catalogue from the server (single source of truth). placeholderData
+  // shows seed cars instantly while the real catalogue loads, so direct links
+  // to newly-added cars still resolve once the fetch completes.
+  const { data: cars = FALLBACK_CARS, isLoading } = useQuery({
+    queryKey: ["cars"],
+    queryFn: fetchCars,
+    placeholderData: FALLBACK_CARS,
+    staleTime: 30_000,
+  });
+  const vehicle = cars.find((c) => c.id === (id || "1"));
 
   const [plan, setPlan] = useState<"weekly" | "monthly">("weekly");
 
   if (!vehicle) {
+    if (isLoading) {
+      return (
+        <div className="min-h-screen bg-white">
+          <Navigation />
+          <div className="max-w-7xl mx-auto px-6 sm:px-12 py-20 text-center text-foreground/60">
+            Loading vehicle…
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-white">
         <Navigation />
@@ -104,7 +52,7 @@ export default function VehicleDetail() {
   }
 
   const selectedPrice =
-    plan === "weekly" ? vehicle.weeklyPrice : vehicle.monthlyPrice;
+    plan === "weekly" ? vehicle.weekly : vehicle.monthly;
 
   const handleBook = () => {
     navigate(
@@ -162,14 +110,14 @@ export default function VehicleDetail() {
                     Pricing
                   </p>
                   <p className="text-xl font-bold text-accent">
-                    ${vehicle.weeklyPrice}
+                    ${vehicle.weekly}
                     <span className="text-sm text-foreground/60 font-medium">
                       {" "}
                       / week
                     </span>
                   </p>
                   <p className="text-xl font-bold text-accent">
-                    ${vehicle.monthlyPrice}
+                    ${vehicle.monthly}
                     <span className="text-sm text-foreground/60 font-medium">
                       {" "}
                       / month
@@ -218,7 +166,7 @@ export default function VehicleDetail() {
                       )}
                     </div>
                     <p className="text-2xl font-bold text-accent">
-                      ${vehicle.weeklyPrice}
+                      ${vehicle.weekly}
                     </p>
                     <p className="text-xs text-foreground/60">
                       Charged every week until canceled
@@ -248,7 +196,7 @@ export default function VehicleDetail() {
                       )}
                     </div>
                     <p className="text-2xl font-bold text-accent">
-                      ${vehicle.monthlyPrice}
+                      ${vehicle.monthly}
                     </p>
                     <p className="text-xs text-foreground/60">
                       Charged every month until canceled

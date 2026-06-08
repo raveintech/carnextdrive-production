@@ -1,39 +1,21 @@
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Navigation } from "@/components/Navigation";
 import { Car, FileText, CheckCircle } from "lucide-react";
-
-// Display prices for car cards. Authoritative pricing lives on the server
-// in server/routes/stripe.ts (CAR_CATALOG). Keep these two in sync.
-const cars = [
-  {
-    id: 1,
-    name: "Chrysler 200",
-    type: "Sedan",
-    weeklyPrice: 349,
-    monthlyPrice: 1199,
-    image: "/cars/chrysler-200.jpg",
-  },
-  {
-    id: 2,
-    name: "Chevy Camaro",
-    type: "Coupe",
-    weeklyPrice: 399,
-    monthlyPrice: 1349,
-    image:
-      "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?w=500&h=400&fit=crop",
-  },
-  {
-    id: 3,
-    name: "Chevy Tahoe",
-    type: "SUV",
-    weeklyPrice: 479,
-    monthlyPrice: 1599,
-    image: "/cars/tahoe.jpg",
-  },
-];
+import { fetchCars, FALLBACK_CARS } from "@/lib/cars";
 
 export default function Index() {
+  // Live catalogue from the server (single source of truth). placeholderData
+  // shows seed cars instantly for fast first paint / API outages, but (unlike
+  // initialData) still fetches the real catalogue so admin edits show up.
+  const { data: cars = FALLBACK_CARS } = useQuery({
+    queryKey: ["cars"],
+    queryFn: fetchCars,
+    placeholderData: FALLBACK_CARS,
+    staleTime: 30_000,
+  });
+
   return (
     <div className="min-h-screen bg-white">
       <Navigation />
@@ -163,7 +145,7 @@ export default function Index() {
                         className="text-2xl font-bold text-accent"
                         data-testid={`car-weekly-price-${car.id}`}
                       >
-                        ${car.weeklyPrice}
+                        ${car.weekly}
                       </span>
                       <span className="text-foreground/60 text-sm">/week</span>
                     </div>
@@ -172,7 +154,7 @@ export default function Index() {
                         className="text-2xl font-bold text-accent"
                         data-testid={`car-monthly-price-${car.id}`}
                       >
-                        ${car.monthlyPrice}
+                        ${car.monthly}
                       </span>
                       <span className="text-foreground/60 text-sm">/month</span>
                     </div>

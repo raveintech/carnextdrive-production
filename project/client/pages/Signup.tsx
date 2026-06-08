@@ -1,14 +1,10 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Navigation } from "@/components/Navigation";
 import { Upload, Loader2 } from "lucide-react";
-
-const CARS: Record<string, { name: string; weekly: number; monthly: number }> = {
-  "1": { name: "Chrysler 200", weekly: 349, monthly: 1199 },
-  "2": { name: "Chevy Camaro", weekly: 399, monthly: 1349 },
-  "3": { name: "Chevy Tahoe", weekly: 479, monthly: 1599 },
-};
+import { fetchCars, FALLBACK_CARS } from "@/lib/cars";
 
 const CLOUDINARY_CLOUD_NAME = "drlo4xvo8";
 
@@ -55,9 +51,17 @@ export default function Signup() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
+  // Live catalogue from the server (single source of truth).
+  const { data: cars = FALLBACK_CARS } = useQuery({
+    queryKey: ["cars"],
+    queryFn: fetchCars,
+    placeholderData: FALLBACK_CARS,
+    staleTime: 30_000,
+  });
+
   const carId = searchParams.get("carId") || "";
   const plan = (searchParams.get("plan") as "weekly" | "monthly") || "";
-  const car = CARS[carId];
+  const car = cars.find((c) => c.id === carId);
   const price =
     car && (plan === "weekly" || plan === "monthly")
       ? plan === "weekly"

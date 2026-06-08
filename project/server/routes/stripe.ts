@@ -1,22 +1,13 @@
 import { RequestHandler } from "express";
 import Stripe from "stripe";
 import { notifyFromWebhook } from "./notifications";
+import { getCatalog, getCatalogMap } from "../catalog/store";
 
-// Server-side car catalogue: prices live ONLY on the server so the
-// client cannot manipulate amounts. Edit prices here.
+// Server-side car catalogue: prices live ONLY on the server so the client
+// cannot manipulate amounts. The authoritative data is managed via the admin
+// page and persisted by server/catalog/store.ts. Pricing is always read fresh
+// from the store at checkout time.
 type Plan = "weekly" | "monthly";
-
-interface CarPricing {
-  name: string;
-  weekly: number; // dollars, charged every week
-  monthly: number; // dollars, charged every month
-}
-
-const CAR_CATALOG: Record<string, CarPricing> = {
-  "1": { name: "Chrysler 200", weekly: 349, monthly: 1199 },
-  "2": { name: "Chevy Camaro", weekly: 399, monthly: 1349 },
-  "3": { name: "Chevy Tahoe", weekly: 479, monthly: 1599 },
-};
 
 function getStripe(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -54,7 +45,8 @@ export const createCheckoutSession: RequestHandler = async (req, res) => {
       originUrl?: string;
     };
 
-    if (!carId || !CAR_CATALOG[carId]) {
+    const catalog = await getCatalogMap();
+    if (!carId || !catalog[carId]) {
       return res.status(400).json({ error: "Invalid carId" });
     }
     if (plan !== "weekly" && plan !== "monthly") {
@@ -64,7 +56,7 @@ export const createCheckoutSession: RequestHandler = async (req, res) => {
       return res.status(400).json({ error: "customerEmail is required" });
     }
 
-    const car = CAR_CATALOG[carId];
+    const car = catalog[carId];
     const amountDollars = plan === "weekly" ? car.weekly : car.monthly;
     const interval: "week" | "month" = plan === "weekly" ? "week" : "month";
 
@@ -211,7 +203,8 @@ export const stripeWebhook: RequestHandler = async (req, res) => {
   return res.json({ received: true });
 };
 
-// Expose pricing so frontend stays in sync without duplicating amounts in code.
-export const getCarPricing: RequestHandler = (_req, res) => {
-  res.json(CAR_CATALOG);
+// Expose the full catalogue so the frontend stays in sync with a single
+// server-side source of truth (no duplicated amounts in client code).
+export const getCarPricing: RequestHandler = async (_req, res) => {
+  res.json(await getCatalog());
 };
