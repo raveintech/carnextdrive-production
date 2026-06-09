@@ -2,13 +2,15 @@
  * Durable persistence for the car catalogue.
  *
  * Serverless functions (Netlify) have a read-only filesystem except for the
- * ephemeral /tmp dir, so admin edits cannot be written back to source files.
- * We therefore persist the catalogue to:
+ * ephemeral /tmp dir, so admin edits cannot be written back to source files and
+ * a /tmp write does not survive a cold start. The durable store is therefore a
+ * Postgres database:
  *
- *   1. Netlify Blobs  — first-party, durable across deploys & instances. Used
- *      automatically when running inside the Netlify Functions runtime.
- *   2. A local JSON file — used for local/Replit dev (and as a best-effort
- *      fallback on /tmp when Blobs is unavailable).
+ *   1. Postgres — durable across deploys & instances. Used whenever a connection
+ *      string is configured (NETLIFY_DATABASE_URL in prod, DATABASE_URL in dev).
+ *      The whole catalogue is stored as a single JSONB row.
+ *   2. A local JSON file — used ONLY for local dev when no database is
+ *      configured, so the app still renders something sensible.
  *
  * Reads prefer the persisted copy and fall back to the seed data. Once an admin
  * saves, the persisted copy is authoritative.
@@ -16,10 +18,16 @@
 
 import { promises as fs } from "fs";
 import path from "path";
+import { Pool } from "pg";
 import { Car, cloneSeed } from "./data";
 
-const BLOB_STORE_NAME = "carnextdrive-catalog";
-const BLOB_KEY = "catalog-v1";
+// Netlify DB (Neon) exposes NETLIFY_DATABASE_URL (pooled, best for serverless);
+// plain Postgres / Replit dev exposes DATABASE_URL.
+const CONNECTION_STRING =
+  process.env.NETLIFY_DATABASE_URL ||
+  process.env.NETLIFY_DATABASE_URL_UNPOOLED ||
+  process.env.DATABASE_URL ||
+  "";
 
 // Local file fallback. On Lambda/Netlify only /tmp is writable.
 const DATA_DIR = process.env.LAMBDA_TASK_ROOT
@@ -32,20 +40,53 @@ const FILE_PATH = path.join(DATA_DIR, "catalog.json");
 let cache: { cars: Car[]; at: number } | null = null;
 const CACHE_TTL_MS = 30_000;
 
-// ── Netlify Blobs (lazily imported so dev without the package still works) ──
-async function getBlobStore(): Promise<{
-  get: (key: string, opts?: any) => Promise<any>;
-  setJSON: (key: string, value: unknown) => Promise<void>;
-} | null> {
-  try {
-    // Dynamic import keeps this optional; esbuild bundles it for the function.
-    const mod: any = await import("@netlify/blobs");
-    if (!mod?.getStore) return null;
-    return mod.getStore({ name: BLOB_STORE_NAME, consistency: "strong" });
-  } catch {
-    // Not running on Netlify / package unavailable.
-    return null;
+// ── Postgres ────────────────────────────────────────────────────────────────
+// Single pool reused across warm invocations. max:1 keeps connection use low in
+// the serverless runtime (Neon's pooled endpoint handles concurrency).
+let pool: Pool | null = null;
+let tableReady: Promise<void> | null = null;
+
+function sslConfig(cs: string): false | { rejectUnauthorized: boolean } {
+  if (/sslmode=disable/.test(cs)) return false;
+  // Managed cloud Postgres (Neon, Netlify DB, AWS) requires SSL; an internal
+  // dev host (e.g. Replit) typically doesn't.
+  if (/sslmode=require|neon\.tech|netlify|\.aws\.|amazonaws/.test(cs)) {
+    return { rejectUnauthorized: false };
   }
+  return false;
+}
+
+function getPool(): Pool | null {
+  if (!CONNECTION_STRING) return null;
+  if (!pool) {
+    pool = new Pool({
+      connectionString: CONNECTION_STRING,
+      max: 1,
+      ssl: sslConfig(CONNECTION_STRING),
+    });
+  }
+  return pool;
+}
+
+function ensureTable(p: Pool): Promise<void> {
+  if (!tableReady) {
+    tableReady = p
+      .query(
+        `CREATE TABLE IF NOT EXISTS catalog (
+           id integer PRIMARY KEY DEFAULT 1,
+           cars jsonb NOT NULL,
+           updated_at timestamptz NOT NULL DEFAULT now(),
+           CONSTRAINT catalog_single_row CHECK (id = 1)
+         )`,
+      )
+      .then(() => undefined)
+      .catch((err) => {
+        // Reset so a later call can retry instead of caching the failure.
+        tableReady = null;
+        throw err;
+      });
+  }
+  return tableReady;
 }
 
 function isValidCatalog(value: unknown): value is Car[] {
@@ -63,14 +104,42 @@ function isValidCatalog(value: unknown): value is Car[] {
   );
 }
 
-async function readFromBlobs(): Promise<Car[] | null> {
-  const store = await getBlobStore();
-  if (!store) return null;
+async function readFromDb(): Promise<Car[] | null> {
+  const p = getPool();
+  if (!p) return null;
   try {
-    const data = await store.get(BLOB_KEY, { type: "json" });
-    return isValidCatalog(data) ? data : null;
-  } catch {
+    await ensureTable(p);
+    const { rows } = await p.query("SELECT cars FROM catalog WHERE id = 1");
+    if (rows.length === 0) return null;
+    const cars = rows[0].cars;
+    return isValidCatalog(cars) ? cars : null;
+  } catch (err) {
+    console.warn(
+      "[catalog] Postgres read failed:",
+      (err as any)?.message || err,
+    );
     return null;
+  }
+}
+
+async function writeToDb(cars: Car[]): Promise<boolean> {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await ensureTable(p);
+    await p.query(
+      `INSERT INTO catalog (id, cars, updated_at)
+       VALUES (1, $1::jsonb, now())
+       ON CONFLICT (id) DO UPDATE SET cars = EXCLUDED.cars, updated_at = now()`,
+      [JSON.stringify(cars)],
+    );
+    return true;
+  } catch (err) {
+    console.error(
+      "[catalog] Postgres write failed:",
+      (err as any)?.message || err,
+    );
+    return false;
   }
 }
 
@@ -81,18 +150,6 @@ async function readFromFile(): Promise<Car[] | null> {
     return isValidCatalog(parsed) ? parsed : null;
   } catch {
     return null;
-  }
-}
-
-async function writeToBlobs(cars: Car[]): Promise<boolean> {
-  const store = await getBlobStore();
-  if (!store) return false;
-  try {
-    await store.setJSON(BLOB_KEY, cars);
-    return true;
-  } catch (err) {
-    console.warn("[catalog] blob write failed:", (err as any)?.message || err);
-    return false;
   }
 }
 
@@ -112,8 +169,7 @@ export async function getCatalog(): Promise<Car[]> {
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
     return cache.cars;
   }
-  const cars =
-    (await readFromBlobs()) ?? (await readFromFile()) ?? cloneSeed();
+  const cars = (await readFromDb()) ?? (await readFromFile()) ?? cloneSeed();
   cache = { cars, at: Date.now() };
   return cars;
 }
@@ -125,14 +181,25 @@ export async function getCatalogMap(): Promise<Record<string, Car>> {
 }
 
 /**
- * Persist the entire catalogue. Writes to every available backend so the data
- * is durable wherever the app runs. Returns true if at least one backend
- * accepted the write.
+ * Persist the entire catalogue. When a database is configured (production and
+ * Replit dev), Postgres is the only durable backend — a file-only write lands
+ * on ephemeral /tmp and would silently disappear on the next cold start, which
+ * is why admin edits used to "revert after some time". So we only report
+ * success when the durable backend accepted the write, letting the admin route
+ * surface a real error instead of losing the change later.
  */
 export async function saveCatalog(cars: Car[]): Promise<boolean> {
-  const blobOk = await writeToBlobs(cars);
+  const hasDb = Boolean(CONNECTION_STRING);
+  const dbOk = await writeToDb(cars);
   const fileOk = await writeToFile(cars);
   // Update cache regardless so the running instance is immediately consistent.
   cache = { cars, at: Date.now() };
-  return blobOk || fileOk;
+
+  const durable = hasDb ? dbOk : fileOk;
+  if (!durable) {
+    console.error(
+      `[catalog] catalogue NOT durably persisted (hasDb=${hasDb}, dbOk=${dbOk}, fileOk=${fileOk})`,
+    );
+  }
+  return durable;
 }
