@@ -42,8 +42,14 @@ async function getBlobStore(): Promise<{
     const mod: any = await import("@netlify/blobs");
     if (!mod?.getStore) return null;
     return mod.getStore({ name: BLOB_STORE_NAME, consistency: "strong" });
-  } catch {
-    // Not running on Netlify / package unavailable.
+  } catch (err) {
+    // Not running on Netlify, package unavailable, or Blobs not configured for
+    // the site. Log it — silent failure here is what makes admin edits appear
+    // to "save" and then revert (they only ever land in ephemeral /tmp).
+    console.warn(
+      "[catalog] Netlify Blobs unavailable:",
+      (err as any)?.message || err,
+    );
     return null;
   }
 }
@@ -134,5 +140,18 @@ export async function saveCatalog(cars: Car[]): Promise<boolean> {
   const fileOk = await writeToFile(cars);
   // Update cache regardless so the running instance is immediately consistent.
   cache = { cars, at: Date.now() };
-  return blobOk || fileOk;
+
+  // On Lambda/Netlify the local file lives on ephemeral /tmp, so a file-only
+  // write is NOT durable — it disappears when the function instance recycles,
+  // which is why admin edits "revert after some time". Only Netlify Blobs is
+  // durable there, so don't report success on a /tmp-only write: let the admin
+  // route return a real 500 instead of silently losing the change later.
+  const onLambda = Boolean(process.env.LAMBDA_TASK_ROOT);
+  const durable = onLambda ? blobOk : blobOk || fileOk;
+  if (!durable) {
+    console.error(
+      `[catalog] catalogue NOT durably persisted (blobOk=${blobOk}, fileOk=${fileOk}, onLambda=${onLambda})`,
+    );
+  }
+  return durable;
 }
