@@ -21,6 +21,7 @@ import {
   updateCar,
   deleteCar,
 } from "./routes/admin";
+import { getStoreHealth } from "./catalog/store";
 
 export function createServer() {
   const app = express();
@@ -45,6 +46,17 @@ export function createServer() {
   });
 
   app.get("/api/demo", handleDemo);
+
+  // Catalogue store health — confirms whether the durable DB is connected.
+  app.get("/api/health", async (_req, res) => {
+    try {
+      res.json(await getStoreHealth());
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: (err as any)?.message || "health check failed" });
+    }
+  });
 
   // Stripe Checkout (subscriptions: weekly or monthly)
   app.post("/api/create-checkout-session", createCheckoutSession);

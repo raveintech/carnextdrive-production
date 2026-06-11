@@ -164,6 +164,50 @@ async function writeToFile(cars: Car[]): Promise<boolean> {
   }
 }
 
+/**
+ * Read-only diagnostics for confirming the durable store is wired up in a given
+ * environment, without exposing the connection string. Safe to expose publicly:
+ * it returns booleans/counts only, never the credentials or the catalogue.
+ */
+export async function getStoreHealth(): Promise<{
+  hasConnectionString: boolean;
+  dbReadable: boolean;
+  carCount: number | null;
+  source: "postgres" | "file" | "seed";
+  error?: string;
+}> {
+  const hasConnectionString = Boolean(CONNECTION_STRING);
+  if (hasConnectionString) {
+    const p = getPool();
+    try {
+      await ensureTable(p!);
+      const { rows } = await p!.query("SELECT cars FROM catalog WHERE id = 1");
+      const cars = rows.length ? rows[0].cars : null;
+      return {
+        hasConnectionString,
+        dbReadable: true,
+        carCount: isValidCatalog(cars) ? cars.length : 0,
+        source: "postgres",
+      };
+    } catch (err) {
+      return {
+        hasConnectionString,
+        dbReadable: false,
+        carCount: null,
+        source: "postgres",
+        error: (err as any)?.message || String(err),
+      };
+    }
+  }
+  const fileCars = await readFromFile();
+  return {
+    hasConnectionString,
+    dbReadable: false,
+    carCount: (fileCars ?? cloneSeed()).length,
+    source: fileCars ? "file" : "seed",
+  };
+}
+
 /** Returns the full catalogue (persisted copy if present, else seed). */
 export async function getCatalog(): Promise<Car[]> {
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
