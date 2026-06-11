@@ -21,9 +21,13 @@ import path from "path";
 import { Pool } from "pg";
 import { Car, cloneSeed } from "./data";
 
-// Netlify DB (Neon) exposes NETLIFY_DATABASE_URL (pooled, best for serverless);
-// plain Postgres / Replit dev exposes DATABASE_URL.
+// The current Netlify Database (in-project, powered by Neon) exposes
+// NETLIFY_DB_URL. The deprecated Netlify DB extension exposed
+// NETLIFY_DATABASE_URL / NETLIFY_DATABASE_URL_UNPOOLED. Plain Postgres / Replit
+// dev exposes DATABASE_URL. Accept all so the app works regardless of how the
+// database was provisioned.
 const CONNECTION_STRING =
+  process.env.NETLIFY_DB_URL ||
   process.env.NETLIFY_DATABASE_URL ||
   process.env.NETLIFY_DATABASE_URL_UNPOOLED ||
   process.env.DATABASE_URL ||
