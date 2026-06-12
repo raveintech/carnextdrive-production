@@ -217,7 +217,12 @@ export async function getCatalog(): Promise<Car[]> {
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
     return cache.cars;
   }
-  const cars = (await readFromDb()) ?? (await readFromFile()) ?? cloneSeed();
+  // When a DB is configured it is the sole backend — never fall back to the
+  // (possibly stale) local /tmp file in production. The file is only consulted
+  // for local dev where no connection string is set.
+  const fromDb = await readFromDb();
+  const cars =
+    fromDb ?? (CONNECTION_STRING ? null : await readFromFile()) ?? cloneSeed();
   cache = { cars, at: Date.now() };
   return cars;
 }
@@ -239,7 +244,10 @@ export async function getCatalogMap(): Promise<Record<string, Car>> {
 export async function saveCatalog(cars: Car[]): Promise<boolean> {
   const hasDb = Boolean(CONNECTION_STRING);
   const dbOk = await writeToDb(cars);
-  const fileOk = await writeToFile(cars);
+  // The local file is only the durable backend in no-DB local dev. When a DB is
+  // configured, skip it entirely: a /tmp write is redundant and would never be
+  // read back (getCatalog ignores the file when CONNECTION_STRING is set).
+  const fileOk = hasDb ? false : await writeToFile(cars);
   // Update cache regardless so the running instance is immediately consistent.
   cache = { cars, at: Date.now() };
 
